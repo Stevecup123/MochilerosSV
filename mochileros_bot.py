@@ -27,8 +27,15 @@ st.set_page_config(
 
 api_key = os.getenv("OPENAI_API_KEY")
 
+# Si estamos en Streamlit Cloud, usar Secrets
 if not api_key:
-    st.error("No se encontró OPENAI_API_KEY en el archivo .env")
+    try:
+        api_key = st.secrets["OPENAI_API_KEY"]
+    except (FileNotFoundError, KeyError):
+        pass
+
+if not api_key:
+    st.error("No se encontró OPENAI_API_KEY.")
     st.stop()
 
 llm = ChatOpenAI(
@@ -36,7 +43,6 @@ llm = ChatOpenAI(
     temperature=0.7,
     api_key=api_key
 )
-
 # ============================================================
 # ENCABEZADO
 # ============================================================
