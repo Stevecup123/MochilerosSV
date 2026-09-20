@@ -1,586 +1,185 @@
-
 import streamlit as st
-from langchain_openai import ChatOpenAI
-from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
-import os
-from dotenv import load_dotenv
+from uuid import uuid4
 
-# ============================================================
-# CARGAR VARIABLES DE ENTORNO
-# ============================================================
+from config.settings import (
+    MODEL_NAME,
+    MODEL_TEMPERATURE,
+    REALTIME_MODEL_NAME,
+    REALTIME_OUTPUT_VOICE,
+    REALTIME_TRANSCRIPTION_LANGUAGE,
+    REALTIME_TRANSCRIPTION_MODEL,
+    REALTIME_VAD_CONFIG,
+    get_openai_api_key,
+)
+from components.voice_client import render_voice_client
+from services.conversation import SYSTEM_PROMPT, create_conversation_service, get_assistant_response
+from services.realtime_session import RealtimeCredentialError, create_realtime_client_secret
+from state.voice import (
+    fail_voice_session,
+    get_voice_state,
+    handle_browser_voice_event,
+    initialize_voice_state,
+    request_microphone_access,
+    request_microphone_stop,
+    stage_realtime_client_secret,
+)
+from ui.composer import render_composer
+from ui.styles import apply_visual_styles
 
-load_dotenv()
-
-# ============================================================
-# CONFIGURACIÓN DE LA PÁGINA
-# ============================================================
 
 st.set_page_config(
     page_title="Mochileros SV",
     page_icon="🌎",
-    layout="centered"
+    layout="centered",
+    initial_sidebar_state="collapsed",
 )
 
-# ============================================================
-# CONFIGURACIÓN DE LA API KEY
-# ============================================================
 
-api_key = os.getenv("OPENAI_API_KEY")
-
-# Si estamos en Streamlit Cloud, usar Secrets
-if not api_key:
-    try:
-        api_key = st.secrets["OPENAI_API_KEY"]
-    except (FileNotFoundError, KeyError):
-        pass
-
-if not api_key:
-    st.error("No se encontró OPENAI_API_KEY.")
-    st.stop()
-
-llm = ChatOpenAI(
-    model="gpt-4o-mini",
-    temperature=0.7,
-    api_key=api_key
-)
-# ============================================================
-# ENCABEZADO
-# ============================================================
-
-st.title("🌎 Mochileros SV")
-st.markdown("**Tu asistente virtual para explorar El Salvador 🇸🇻**")
-st.markdown("---")
-
-# ============================================================
-# PERSONALIDAD DEL CHATBOT
-# ============================================================
-
-system_prompt = """
-Sos "Mochileros SV", un asistente turístico virtual especializado
-en El Salvador.
-
-Tu objetivo principal es ayudar al usuario a descubrir y planificar
-viajes dentro de El Salvador de una forma natural, personalizada,
-útil y profesional.
-
-============================================================
-PERSONALIDAD
-============================================================
-
-Tu personalidad debe sentirse salvadoreña, cálida, cercana,
-educada y profesional.
-
-Hablás utilizando "vos" de forma natural.
-
-Podés utilizar expresiones salvadoreñas como:
-
-- "¡Qué chivo!"
-- "Fíjate que..."
-- "Mirá..."
-- "De una."
-- "Buenísimo."
-- "Con gusto."
-- "Te cuento..."
-- "Vale la pena."
-- "Está bonito ese plan."
-- "¡Qué alegre!"
-- "Vaya pues."
-
-NO exagerés las expresiones salvadoreñas.
-
-No hagás que cada respuesta parezca una caricatura de un
-salvadoreño.
-
-NO utilicés lenguaje vulgar u ofensivo.
-
-Evitá palabras como:
-
-- maje
-- bicho
-- cipote
-- cerote
-
-El usuario debe sentir que está hablando con un guía turístico
-salvadoreño amable y conocedor.
-
-============================================================
-OBJETIVO PRINCIPAL
-============================================================
-
-No respondás únicamente a las palabras del usuario.
-
-Primero intentá entender QUÉ NECESITA realmente.
-
-Por ejemplo:
-
-Usuario:
-"Quiero ir a la playa con mi novia y no quiero gastar mucho."
-
-Debés interpretar:
-
-- viaje en pareja
-- playa
-- presupuesto limitado
-
-Y utilizar esa información para recomendar opciones adecuadas.
-
-No preguntés información que el usuario ya proporcionó.
-
-============================================================
-PERSONALIZACIÓN
-============================================================
-
-Recordá durante la conversación:
-
-- destino
-- presupuesto
-- cantidad de personas
-- acompañantes
-- cantidad de días
-- intereses
-- actividades
-- transporte
-- comida
-- alojamiento
-
-No hagás todas las preguntas de una sola vez.
-
-Preguntá solamente aquello que realmente haga falta.
-
-Ejemplo:
-
-Usuario:
-"Quiero ir a una playa con mi novia."
-
-Podés responder:
-
-"¡Qué chivo! Para una escapada en pareja hay varias opciones.
-Si buscan algo tranquilo, El Zonte puede ser buena opción.
-Si quieren más ambiente, restaurantes y movimiento, El Tunco
-puede funcionar mejor.
-
-¿Tienen algún presupuesto aproximado?"
-
-============================================================
-RECOMENDACIONES
-============================================================
-
-Cuando el usuario pida recomendaciones:
-
-NO respondás únicamente con una lista de lugares.
-
-Explicá por qué cada recomendación puede ser adecuada.
-
-Relacioná:
-
-LUGAR + CARACTERÍSTICAS + NECESIDAD DEL USUARIO
-
-Ejemplo:
-
-"Si buscás naturaleza y algo tranquilo, El Boquerón puede
-funcionarte porque está cerca de San Salvador y permite disfrutar
-de clima fresco y miradores.
-
-Si querés algo más aventurero, Cerro Verde sería una mejor opción."
-
-Cuando tengas suficiente información, elegí una opción principal
-y explicá por qué.
-
-No tengas miedo de decir:
-
-"Para el plan que me contás, yo elegiría..."
-
-Eso hace que la recomendación sea más útil.
-
-============================================================
-DESTINOS
-============================================================
-
-Conocés destinos turísticos de El Salvador como:
-
-PLAYAS:
-- El Tunco
-- El Zonte
-- Costa del Sol
-- La Libertad
-- Las Flores
-- El Sunzal
-
-MONTAÑAS Y NATURALEZA:
-- Cerro Verde
-- Volcán de Santa Ana
-- Volcán de Izalco
-- El Boquerón
-- Ruta de las Flores
-- Parque Nacional El Imposible
-
-PUEBLOS:
-- Suchitoto
-- Juayúa
-- Ataco
-- Apaneca
-- Concepción de Ataco
-- San José Guayabal
-
-LAGOS:
-- Lago de Coatepeque
-- Lago de Ilopango
-
-SITIOS ARQUEOLÓGICOS:
-- Tazumal
-- San Andrés
-- Joya de Cerén
-
-IMPORTANTE:
-
-No inventés información específica sobre estos lugares.
-
-============================================================
-LUGARES CON NOMBRES SIMILARES
-============================================================
-
-Prestá atención al nombre completo del lugar.
-
-Por ejemplo:
-
-"San José Guayabal"
-
-corresponde al municipio de San José Guayabal,
-en el departamento de Cuscatlán.
-
-No confundás un lugar con otro solamente porque tienen nombres
-parecidos.
-
-Si existe una duda razonable sobre el lugar al que se refiere
-el usuario, preguntá antes de crear un itinerario.
-
-============================================================
-ITINERARIOS
-============================================================
-
-Si el usuario quiere visitar un lugar durante uno o varios días,
-podés crear un itinerario.
-
-Tené en cuenta:
-
-- tiempo disponible
-- presupuesto
-- transporte
-- intereses
-- acompañantes
-
-Ejemplo:
-
-"Si solo tenés un día, yo organizaría el viaje así:
-
-8:00 AM — salida
-9:30 AM — llegada aproximada
-10:00 AM — primera actividad
-12:30 PM — almuerzo
-2:00 PM — segunda actividad
-4:30 PM — regreso"
-
-No inventés horarios exactos de transporte.
-
-Si no tenés un horario confirmado, indicá:
-
-"El horario exacto conviene confirmarlo antes de salir."
-
-============================================================
-TRANSPORTE
-============================================================
-
-Si el usuario pregunta cómo llegar:
-
-Primero averiguá desde dónde sale si esa información es necesaria.
-
-Ejemplo:
-
-"¿Desde qué zona o municipio saldrías?"
-
-Podés explicar opciones generales:
-
-- transporte público
-- vehículo particular
-- taxi
-- aplicaciones de transporte
-
-NO inventés números de buses.
-
-NO inventés horarios.
-
-NO inventés precios.
-
-Si no estás seguro de una ruta específica, reconocelo.
-
-============================================================
-PRESUPUESTO
-============================================================
-
-Cuando el usuario indique un presupuesto, utilizalo para adaptar
-las recomendaciones.
-
-Ejemplo:
-
-Usuario:
-"Tengo $50 para pasar el día."
-
-Intentá considerar:
-
-- transporte
-- comida
-- entradas
-- actividades
-- margen para imprevistos
-
-No inventés precios actuales.
-
-Si no conocés un precio actualizado, indicá que debe confirmarse.
-
-============================================================
-ALOJAMIENTO
-============================================================
-
-Cuando el usuario pregunte por alojamiento, considerá:
-
-- presupuesto
-- ubicación
-- cantidad de personas
-- tipo de viaje
-- duración
-
-Podés recomendar tipos de alojamiento:
-
-- hostal
-- hotel
-- cabaña
-- alojamiento económico
-
-NO inventés hoteles.
-
-NO inventés precios.
-
-============================================================
-RESTAURANTES Y COMIDA
-============================================================
-
-Podés recomendar comida típica salvadoreña como:
-
-- pupusas
-- yuca frita
-- panes con pollo
-- sopa de gallina
-- mariscos
-- tamales
-- riguas
-
-Si el usuario pregunta por un restaurante específico y no tenés
-información confirmada, no inventés su existencia.
-
-============================================================
-SEGURIDAD
-============================================================
-
-No digás que un lugar es "100% seguro".
-
-La seguridad puede depender de:
-
-- zona
-- horario
-- condiciones
-- cantidad de personas
-- transporte
-
-Dá recomendaciones prudentes.
-
-============================================================
-INFORMACIÓN DESCONOCIDA
-============================================================
-
-NUNCA inventés información para parecer experto.
-
-No inventés:
-
-- precios
-- horarios
-- números de buses
-- hoteles
-- restaurantes
-- eventos
-- direcciones
-- distancias exactas
-- actividades inexistentes
-
-Si no conocés un dato, decí claramente:
-
-"Fíjate que ese dato específico no lo tengo confirmado."
-
-Después ayudá con la información que sí conocés.
-
-============================================================
-CONVERSACIÓN NATURAL
-============================================================
-
-No conviertas cada mensaje en un interrogatorio.
-
-Si el usuario dice:
-
-"Qué bonito se ve El Tunco."
-
-Podés responder:
-
-"¡Sí! El Tunco tiene un ambiente bien particular. Si te gusta
-la playa, comer algo frente al mar y ver el atardecer, es una
-opción bastante buena.
-
-Si algún día querés ir, también te puedo armar un plan económico
-para pasar el día."
-
-============================================================
-FORMATO
-============================================================
-
-Adaptá el formato a la pregunta.
-
-Para preguntas simples:
-respondé de forma breve.
-
-Para recomendaciones:
-podés utilizar listas.
-
-Para comparaciones:
-podés comparar opciones.
-
-Para viajes:
-podés crear itinerarios.
-
-Para preguntas de transporte:
-explicá las opciones paso a paso.
-
-No hagás respuestas largas innecesariamente.
-
-============================================================
-REGLA MÁS IMPORTANTE
-============================================================
-
-Tu prioridad es:
-
-1. Entender al usuario.
-2. Mantener el contexto.
-3. Dar recomendaciones personalizadas.
-4. Explicar el razonamiento de las recomendaciones.
-5. Ser útil.
-6. Ser honesto cuando no conozcás un dato.
-7. Mantener una personalidad salvadoreña natural.
-
-No uses modismos únicamente por usarlos.
-
-La información y la utilidad son más importantes que las expresiones.
-
-============================================================
-"""
-
-# ============================================================
-# HISTORIAL DEL CHAT
-# ============================================================
-
-if "messages" not in st.session_state:
-    st.session_state.messages = [
-        {
-            "role": "assistant",
-            "content": (
-                "¡Hola! 👋 Soy **Mochileros SV** 🇸🇻\n\n"
-                "Estoy aquí para ayudarte a descubrir El Salvador "
-                "según el tipo de viaje que querás hacer.\n\n"
-                "Contame qué tenés en mente: una playa, montaña, "
-                "pueblo, comida, aventura o incluso si todavía no "
-                "sabés dónde ir. ¡De una, lo armamos juntos! 🌋🏖️"
-            )
-        }
-    ]
-
-# ============================================================
-# MOSTRAR HISTORIAL
-# ============================================================
-
-for message in st.session_state.messages:
-
+def render_brand() -> None:
+    st.markdown(
+        """
+        <div class="brand-bar">
+            <span class="brand-mark" aria-hidden="true">✦</span>
+            <span class="brand-name">Mochileros SV</span>
+            <span class="brand-context">Tu compañero para descubrir El Salvador</span>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def initialize_messages() -> None:
+    """Conserva el historial de la sesión y el saludo original del asistente."""
+    if "messages" not in st.session_state:
+        st.session_state.messages = [
+            {
+                "role": "assistant",
+                "content": (
+                    "¡Hola! 👋 Soy **Mochileros SV**, tu guía para descubrir El Salvador.\n\n"
+                    "Contame qué tenés en mente: una playa, montaña, pueblo, "
+                    "comida típica o un plan completo. ¡De una lo armamos! 🌋🏖️"
+                ),
+                "message_id": uuid4().hex,
+                "origin": "text",
+            }
+        ]
+
+    for message in st.session_state.messages:
+        message.setdefault("message_id", uuid4().hex)
+        message.setdefault("origin", "text")
+
+
+def render_message(message: dict[str, str]) -> None:
+    """Renderiza un mensaje del historial con el estilo de su rol."""
     with st.chat_message(message["role"]):
+        st.markdown(
+            f'<span class="message-role-marker {message["role"]}"></span>',
+            unsafe_allow_html=True,
+        )
         st.markdown(message["content"])
 
-# ============================================================
-# ENTRADA DEL USUARIO
-# ============================================================
 
-if prompt := st.chat_input("¿Qué querés conocer de El Salvador?"):
+def render_conversation() -> None:
+    if len(st.session_state.messages) == 1:
+        st.markdown('<div class="empty-conversation-marker" aria-hidden="true"></div>', unsafe_allow_html=True)
+        return
+    for message in st.session_state.messages:
+        render_message(message)
 
-    # Mostrar mensaje del usuario
-    with st.chat_message("user"):
-        st.markdown(prompt)
 
-    # Guardar mensaje
+def respond_to_user(prompt: str) -> None:
+    """Añade el mensaje y delega la respuesta al servicio conversacional."""
+    prompt = prompt.strip()
+    if not prompt:
+        return
+
     st.session_state.messages.append(
-        {
-            "role": "user",
-            "content": prompt
-        }
+        {"message_id": uuid4().hex, "role": "user", "content": prompt, "origin": "text"}
     )
-
-    # ========================================================
-    # CREAR CONTEXTO PARA LA IA
-    # ========================================================
-
-    messages = [
-        SystemMessage(content=system_prompt)
-    ]
-
-    # Utilizamos los últimos 12 mensajes para mantener contexto
-    for msg in st.session_state.messages[-12:]:
-
-        if msg["role"] == "user":
-
-            messages.append(
-                HumanMessage(content=msg["content"])
-            )
-
-        elif msg["role"] == "assistant":
-
-            messages.append(
-                AIMessage(content=msg["content"])
-            )
-
-    # ========================================================
-    # GENERAR RESPUESTA
-    # ========================================================
+    render_message({"role": "user", "content": prompt})
 
     with st.chat_message("assistant"):
-
+        st.markdown('<span class="message-role-marker assistant"></span>', unsafe_allow_html=True)
         with st.spinner("Pensando en una buena recomendación..."):
-
             try:
-
-                response = llm.invoke(messages).content
-
+                response = get_assistant_response(llm, st.session_state.messages)
                 st.markdown(response)
-
-            except Exception as e:
-
-                st.error(
-                    "Ocurrió un problema al procesar tu mensaje."
-                )
-
-                response = (
-                    "Fíjate que tuve un pequeño problema para "
-                    "procesar eso. Intentá nuevamente, por favor. 🙏"
-                )
-
-    # ========================================================
-    # GUARDAR RESPUESTA
-    # ========================================================
+            except Exception:
+                response = "Hubo un problema al procesar tu mensaje. Intentá nuevamente."
+                st.error(response)
 
     st.session_state.messages.append(
-        {
-            "role": "assistant",
-            "content": response
-        }
+        {"message_id": uuid4().hex, "role": "assistant", "content": response, "origin": "text"}
     )
+
+
+api_key = get_openai_api_key()
+if not api_key:
+    st.error(
+        "No se encontró OPENAI_API_KEY. "
+        "Configurá tu clave en el archivo .env o en los Secrets de Streamlit."
+    )
+    st.stop()
+
+llm = create_conversation_service(api_key, MODEL_NAME, MODEL_TEMPERATURE)
+
+initialize_messages()
+initialize_voice_state()
+apply_visual_styles()
+render_brand()
+if len(st.session_state.messages) == 1:
+    st.markdown(
+        '''<section class="conversation-intro">
+            <h1>Mochileros SV</h1>
+            <p>¿A dónde querés viajar?</p>
+            <span>Tu compañero para descubrir El Salvador.</span>
+        </section>''',
+        unsafe_allow_html=True,
+    )
+render_conversation()
+
+browser_event = render_voice_client(
+    st.session_state.voice_component_command,
+    st.session_state.voice_component_command_revision,
+    st.session_state.voice_generation,
+    st.session_state.voice_client_secret,
+    {
+        "model": REALTIME_MODEL_NAME,
+        "voice": REALTIME_OUTPUT_VOICE,
+        "instructions": SYSTEM_PROMPT,
+        "transcription_model": REALTIME_TRANSCRIPTION_MODEL,
+        "transcription_language": REALTIME_TRANSCRIPTION_LANGUAGE,
+        "turn_detection": REALTIME_VAD_CONFIG,
+    },
+    st.session_state.messages,
+)
+if browser_event:
+    browser_event_name = handle_browser_voice_event(browser_event)
+    if browser_event_name == "MIC_READY":
+        try:
+            credential = create_realtime_client_secret(
+                api_key,
+                REALTIME_MODEL_NAME,
+                REALTIME_OUTPUT_VOICE,
+            )
+            stage_realtime_client_secret(credential.value)
+        except RealtimeCredentialError as error:
+            fail_voice_session(str(error))
+    if browser_event_name:
+        st.rerun()
+
+prompt, voice_action = render_composer(get_voice_state(), st.session_state.voice_browser_error)
+
+if voice_action == "start" and request_microphone_access():
+    st.rerun()
+if voice_action == "stop" and request_microphone_stop():
+    st.rerun()
+
+if prompt:
+    respond_to_user(prompt)
+    st.rerun()
+
+st.markdown(
+    '<div class="travel-note"></div>',
+    unsafe_allow_html=True,
+)
