@@ -38,6 +38,8 @@ ITINERARIOS:
 - Podés crear itinerarios de uno o varios días.
 - Considerá tiempo, presupuesto, transporte, intereses, acompañantes.
 - No inventés horarios exactos. Si no sabés, decí que se confirmen antes de salir.
+- Cuando el usuario pida planificar un viaje y ya haya indicado destino y días, entregá un itinerario claro con el formato `## Día 1`, actividades, lugar/zona, recomendación, comida sugerida y tiempo aproximado. Si falta un dato importante, preguntá solo por ese dato.
+- Indicá que los tiempos son aproximados y que los horarios deben verificarse cuando corresponda.
 
 TRANSPORTE:
 - Preguntá desde dónde sale si es necesario.
@@ -47,6 +49,10 @@ TRANSPORTE:
 PRESUPUESTO:
 - Adaptá las recomendaciones al presupuesto.
 - No inventés precios actuales.
+- Para una estimación, organizá el presupuesto disponible entre transporte, alimentación, alojamiento y actividades. Presentalo como una distribución orientativa del presupuesto del usuario, no como precios actuales ni garantizados. Si faltan datos, explicá el supuesto de manera breve.
+
+FAVORITOS:
+- Si el contexto indica favoritos guardados, podés tenerlos en cuenta al recomendar. Nunca afirmés que un destino fue guardado si no aparece en ese contexto.
 
 ALOJAMIENTO Y COMIDA:
 - Hablá de hostales, hoteles, cabañas, alojamientos económicos.
@@ -73,9 +79,10 @@ def create_conversation_service(api_key: str, model_name: str, temperature: floa
     return ChatOpenAI(model=model_name, temperature=temperature, api_key=api_key)
 
 
-def build_model_messages(messages: list[dict[str, str]]) -> list:
+def build_model_messages(messages: list[dict[str, str]], travel_context: str = "") -> list:
     """Convierte el historial visible al formato esperado por el modelo."""
-    model_messages = [SystemMessage(content=SYSTEM_PROMPT)]
+    context = f"\n\nCONTEXTO DE VIAJE DE ESTA SESIÓN:\n{travel_context}" if travel_context else ""
+    model_messages = [SystemMessage(content=SYSTEM_PROMPT + context)]
 
     for message in messages[-12:]:
         if message["role"] == "user":
@@ -86,7 +93,7 @@ def build_model_messages(messages: list[dict[str, str]]) -> list:
     return model_messages
 
 
-def get_assistant_response(llm: ChatOpenAI, messages: list[dict[str, str]]) -> str:
+def get_assistant_response(llm: ChatOpenAI, messages: list[dict[str, str]], travel_context: str = "") -> str:
     """Solicita una respuesta manteniendo la ventana de contexto actual."""
-    response = llm.invoke(build_model_messages(messages)).content
+    response = llm.invoke(build_model_messages(messages, travel_context)).content
     return response if isinstance(response, str) else str(response)

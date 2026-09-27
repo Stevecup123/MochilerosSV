@@ -28,7 +28,7 @@ def render_composer(voice_state: VoiceState, voice_error: str | None = None) -> 
         st.session_state.composer_text = ""
 
     with st.container(key="composer_shell"):
-        text_column, voice_column, send_column = st.columns([8, 1.15, 1], gap="small", vertical_alignment="center")
+        text_column, voice_column, send_column = st.columns([8, 1.05, 1], gap="small", vertical_alignment="bottom")
         with text_column:
             if voice_state in ACTIVE_VOICE_STATES:
                 icon, message = _ACTIVE_VOICE_COPY[voice_state]
@@ -38,11 +38,12 @@ def render_composer(voice_state: VoiceState, voice_error: str | None = None) -> 
                     unsafe_allow_html=True,
                 )
             else:
-                st.text_input(
+                st.text_area(
                     "Mensaje",
                     key="composer_text",
-                    placeholder="Escribí tu mensaje...",
+                    placeholder="Contame qué lugar de El Salvador querés descubrir...",
                     label_visibility="collapsed",
+                    height=68,
                     on_change=_submit_text_from_composer,
                 )
 

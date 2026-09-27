@@ -1,5 +1,6 @@
 import streamlit as st
 from uuid import uuid4
+from html import escape
 
 from config.settings import (
     MODEL_NAME,
@@ -23,6 +24,7 @@ from state.voice import (
     request_microphone_stop,
     stage_realtime_client_secret,
 )
+from state.travel import add_favorite, build_travel_context, find_requested_favorite, initialize_travel_state
 from ui.composer import render_composer
 from ui.styles import apply_visual_styles
 
@@ -30,39 +32,113 @@ from ui.styles import apply_visual_styles
 st.set_page_config(
     page_title="Mochileros SV",
     page_icon="🌎",
-    layout="centered",
-    initial_sidebar_state="collapsed",
+    layout="wide",
+    # Streamlit abre el sidebar en escritorio y lo convierte en menú en pantallas pequeñas.
+    initial_sidebar_state="auto",
 )
 
+WELCOME_MESSAGE = {
+    "role": "assistant",
+    "content": (
+        "¡Hola! 👋 Soy **Mochileros SV**, tu guía para descubrir El Salvador.\n\n"
+        "Contame qué tenés en mente: una playa, montaña, pueblo, "
+        "comida típica o un plan completo. ¡De una lo armamos! 🌋🏖️"
+    ),
+    "origin": "text",
+}
 
-def render_brand() -> None:
+
+def render_top_bar() -> None:
     st.markdown(
         """
-        <div class="brand-bar">
-            <span class="brand-mark" aria-hidden="true">✦</span>
-            <span class="brand-name">Mochileros SV</span>
-            <span class="brand-context">Tu compañero para descubrir El Salvador</span>
+        <div class="chat-topbar">
+            <div>
+                <span class="chat-topbar-title">Mochileros SV</span>
+                <span class="chat-topbar-context">Tu compañero para descubrir El Salvador</span>
+            </div>
+            <span class="chat-topbar-status"><i></i> Disponible</span>
         </div>
         """,
         unsafe_allow_html=True,
     )
 
 
+def _conversation_title(messages: list[dict[str, str]]) -> str:
+    """Genera una etiqueta breve para el historial local de la sesión."""
+    for message in messages:
+        if message["role"] == "user":
+            return message["content"].replace("\n", " ").strip()[:38] or "Nueva conversación"
+    return "Nueva conversación"
+
+
+def start_new_conversation() -> None:
+    """Archiva la conversación visible y prepara un chat vacío en esta sesión."""
+    messages = st.session_state.messages
+    if any(message["role"] == "user" for message in messages):
+        st.session_state.conversation_history.insert(
+            0, {"title": _conversation_title(messages), "messages": [message.copy() for message in messages]}
+        )
+    st.session_state.messages = [{**WELCOME_MESSAGE, "message_id": uuid4().hex}]
+    st.session_state.composer_text = ""
+
+
+def render_sidebar() -> None:
+    """Agrupa navegación, historial y favoritos sin alterar el estado de viaje."""
+    with st.sidebar:
+        st.markdown(
+            """<div class="sidebar-brand"><span class="sidebar-mark">⌁</span>
+            <span>Mochileros <b>SV</b></span></div>""",
+            unsafe_allow_html=True,
+        )
+        if st.button("＋  Nueva conversación", key="new_conversation", use_container_width=True):
+            start_new_conversation()
+            st.rerun()
+
+        st.markdown('<p class="sidebar-label">HISTORIAL</p>', unsafe_allow_html=True)
+        history = st.session_state.conversation_history
+        if history:
+            for index, conversation in enumerate(history[:6]):
+                if st.button(f"◷  {conversation['title']}", key=f"history_{index}", use_container_width=True):
+                    st.session_state.messages = [message.copy() for message in conversation["messages"]]
+                    st.rerun()
+        else:
+            st.markdown('<p class="sidebar-empty">Tus conversaciones aparecerán aquí.</p>', unsafe_allow_html=True)
+
+        st.markdown('<p class="sidebar-label favorites-label">FAVORITOS</p>', unsafe_allow_html=True)
+        destination_column, save_column = st.columns([4, 1], vertical_alignment="bottom")
+        with destination_column:
+            destination = st.text_input(
+                "Destino favorito", key="favorite_destination_input",
+                placeholder="Ej. Suchitoto", label_visibility="collapsed",
+            )
+        with save_column:
+            if st.button("Guardar", key="save_favorite", use_container_width=True):
+                if add_favorite(destination):
+                    st.rerun()
+                elif destination.strip():
+                    st.caption("Ese destino ya está en tus favoritos.")
+        favorites = st.session_state.favorite_destinations
+        if favorites:
+            st.markdown(
+                " ".join(f"<span class='favorite-chip'>♥ {escape(item)}</span>" for item in favorites),
+                unsafe_allow_html=True,
+            )
+        else:
+            st.markdown('<p class="sidebar-empty">Guardá tus destinos favoritos.</p>', unsafe_allow_html=True)
+
+        st.markdown(
+            """<div class="sidebar-user"><span class="sidebar-avatar">U</span><span>
+            <strong>Viajero</strong><small>Sesión actual</small></span></div>""",
+            unsafe_allow_html=True,
+        )
+
+
 def initialize_messages() -> None:
     """Conserva el historial de la sesión y el saludo original del asistente."""
     if "messages" not in st.session_state:
-        st.session_state.messages = [
-            {
-                "role": "assistant",
-                "content": (
-                    "¡Hola! 👋 Soy **Mochileros SV**, tu guía para descubrir El Salvador.\n\n"
-                    "Contame qué tenés en mente: una playa, montaña, pueblo, "
-                    "comida típica o un plan completo. ¡De una lo armamos! 🌋🏖️"
-                ),
-                "message_id": uuid4().hex,
-                "origin": "text",
-            }
-        ]
+        st.session_state.messages = [{**WELCOME_MESSAGE, "message_id": uuid4().hex}]
+
+    st.session_state.setdefault("conversation_history", [])
 
     for message in st.session_state.messages:
         message.setdefault("message_id", uuid4().hex)
@@ -87,6 +163,23 @@ def render_conversation() -> None:
         render_message(message)
 
 
+def render_suggestions() -> str | None:
+    """Muestra inicios rápidos que usan exactamente el mismo flujo de mensajes."""
+    suggestions = (
+        "Recomendame lugares para visitar en El Salvador",
+        "Quiero conocer El Tunco",
+        "¿Qué puedo hacer en Cerro Verde?",
+        "Planeame un viaje de fin de semana",
+    )
+    st.markdown('<div class="suggestions-label">Empezá con una idea</div>', unsafe_allow_html=True)
+    columns = st.columns(2, gap="small")
+    for index, suggestion in enumerate(suggestions):
+        with columns[index % 2]:
+            if st.button(suggestion, key=f"suggestion_{index}", use_container_width=True):
+                return suggestion
+    return None
+
+
 def respond_to_user(prompt: str) -> None:
     """Añade el mensaje y delega la respuesta al servicio conversacional."""
     prompt = prompt.strip()
@@ -98,11 +191,28 @@ def respond_to_user(prompt: str) -> None:
     )
     render_message({"role": "user", "content": prompt})
 
+    requested_favorite = find_requested_favorite(prompt)
+    if requested_favorite:
+        was_added = add_favorite(requested_favorite)
+        response = (
+            f"¡Listo! Guardé **{requested_favorite}** en tus favoritos de esta sesión. ♥"
+            if was_added else f"**{requested_favorite}** ya estaba en tus favoritos de esta sesión. ♥"
+        )
+        with st.chat_message("assistant"):
+            st.markdown('<span class="message-role-marker assistant"></span>', unsafe_allow_html=True)
+            st.markdown(response)
+        st.session_state.messages.append(
+            {"message_id": uuid4().hex, "role": "assistant", "content": response, "origin": "text"}
+        )
+        return
+
     with st.chat_message("assistant"):
         st.markdown('<span class="message-role-marker assistant"></span>', unsafe_allow_html=True)
         with st.spinner("Pensando en una buena recomendación..."):
             try:
-                response = get_assistant_response(llm, st.session_state.messages)
+                response = get_assistant_response(
+                    llm, st.session_state.messages, build_travel_context(st.session_state.messages)
+                )
                 st.markdown(response)
             except Exception:
                 response = "Hubo un problema al procesar tu mensaje. Intentá nuevamente."
@@ -124,9 +234,12 @@ if not api_key:
 llm = create_conversation_service(api_key, MODEL_NAME, MODEL_TEMPERATURE)
 
 initialize_messages()
+initialize_travel_state()
 initialize_voice_state()
 apply_visual_styles()
-render_brand()
+render_sidebar()
+render_top_bar()
+suggestion_prompt = None
 if len(st.session_state.messages) == 1:
     st.markdown(
         '''<section class="conversation-intro">
@@ -136,6 +249,7 @@ if len(st.session_state.messages) == 1:
         </section>''',
         unsafe_allow_html=True,
     )
+    suggestion_prompt = render_suggestions()
 render_conversation()
 
 browser_event = render_voice_client(
@@ -175,8 +289,8 @@ if voice_action == "start" and request_microphone_access():
 if voice_action == "stop" and request_microphone_stop():
     st.rerun()
 
-if prompt:
-    respond_to_user(prompt)
+if suggestion_prompt or prompt:
+    respond_to_user(suggestion_prompt or prompt)
     st.rerun()
 
 st.markdown(
