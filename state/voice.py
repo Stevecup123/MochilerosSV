@@ -83,7 +83,7 @@ def transition_voice_state(next_state: VoiceState) -> bool:
     current_state = get_voice_state()
     if next_state not in ALLOWED_TRANSITIONS[current_state]:
         return False
-    st.session_state.voice_state = next_state.value
+    _set_voice_state(next_state)
     return True
 
 
@@ -115,13 +115,16 @@ def request_microphone_stop() -> bool:
     if get_voice_state() not in ACTIVE_VOICE_STATES:
         return False
 
-    st.session_state.voice_state = VoiceState.STOPPED.value
+    _set_voice_state(VoiceState.STOPPED)
     _clear_client_secret()
     st.session_state.voice_generation += 1
     st.session_state.voice_session_id = None
     st.session_state.voice_openai_session_id = None
     st.session_state.voice_operation_id = None
     st.session_state.voice_turn_id = None
+    st.session_state.voice_openai_turns = {}
+    st.session_state.voice_confirmed_user_items = set()
+    st.session_state.voice_confirmed_assistant_items = set()
     _issue_component_command("STOP_SESSION")
     return True
 
@@ -139,8 +142,21 @@ def stage_realtime_client_secret(client_secret: str) -> bool:
 def fail_voice_session(message: str) -> None:
     """Muestra un error seguro, invalida resultados previos y cierra el navegador."""
     st.session_state.voice_browser_error = message
-    st.session_state.voice_state = VoiceState.ERROR.value
+    already_stopping = (
+        get_voice_state() == VoiceState.ERROR
+        and st.session_state.voice_component_command == "STOP_SESSION"
+    )
+    _set_voice_state(VoiceState.ERROR)
     _clear_client_secret()
+    _clear_voice_turn_references()
+    st.session_state.voice_session_id = None
+    st.session_state.voice_openai_session_id = None
+    st.session_state.voice_operation_id = None
+    st.session_state.voice_openai_turns = {}
+    st.session_state.voice_confirmed_user_items = set()
+    st.session_state.voice_confirmed_assistant_items = set()
+    if already_stopping:
+        return
     st.session_state.voice_generation += 1
     _issue_component_command("STOP_SESSION")
 
@@ -188,6 +204,7 @@ def handle_browser_voice_event(event_data: dict) -> str | None:
             transition_voice_state(VoiceState.SPEAKING)
     elif event == "VOICE_RESPONSE_INTERRUPTED" and get_voice_state() == VoiceState.SPEAKING:
         transition_voice_state(VoiceState.LISTENING)
+        _clear_voice_turn_references()
     elif event == "VOICE_USER_TRANSCRIPT_FINAL":
         _append_confirmed_voice_message(event_data, "user")
     elif event == "VOICE_ASSISTANT_TRANSCRIPT_FINAL":
@@ -198,13 +215,11 @@ def handle_browser_voice_event(event_data: dict) -> str | None:
             _append_confirmed_voice_message(assistant_voice_message, "assistant")
         if get_voice_state() == VoiceState.SPEAKING:
             transition_voice_state(VoiceState.LISTENING)
-            st.session_state.voice_turn_id = None
+        _clear_voice_turn_references()
     elif event == "MIC_STOPPED" and get_voice_state() in ACTIVE_VOICE_STATES:
-        st.session_state.voice_state = VoiceState.STOPPED.value
+        _set_voice_state(VoiceState.STOPPED)
     elif event in _BROWSER_ERROR_EVENTS:
-        st.session_state.voice_browser_error = event_data.get("detail") or "No se pudo iniciar la conversación por voz."
-        st.session_state.voice_state = VoiceState.ERROR.value
-        _clear_client_secret()
+        fail_voice_session(event_data.get("detail") or "No se pudo iniciar la conversación por voz.")
 
     return event if isinstance(event, str) else None
 
@@ -212,6 +227,22 @@ def handle_browser_voice_event(event_data: dict) -> str | None:
 def _clear_client_secret() -> None:
     st.session_state.voice_client_secret = None
     st.session_state.voice_client_secret_generation = None
+
+
+def _set_voice_state(state: VoiceState) -> None:
+    st.session_state.voice_state = state.value
+
+
+def _clear_voice_turn_references() -> None:
+    """Descarta el vínculo del turno terminado sin perder deduplicación de la sesión."""
+    turn_id = st.session_state.voice_turn_id
+    if turn_id:
+        st.session_state.voice_openai_turns = {
+            item_id: saved_turn_id
+            for item_id, saved_turn_id in st.session_state.voice_openai_turns.items()
+            if saved_turn_id != turn_id
+        }
+    st.session_state.voice_turn_id = None
 
 
 def _issue_component_command(command: str) -> None:
