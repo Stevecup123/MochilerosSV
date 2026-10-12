@@ -250,20 +250,97 @@ def render_conversation() -> None:
         render_message(message)
 
 
+
 def render_suggestions() -> str | None:
-    """Muestra inicios rápidos que usan exactamente el mismo flujo de mensajes."""
-    suggestions = (
-        "Recomendame lugares para visitar en El Salvador",
-        "Quiero conocer El Tunco",
-        "¿Qué puedo hacer en Cerro Verde?",
-        "Planeame un viaje de fin de semana",
+    """Muestra destinos destacados y consultas rápidas."""
+
+    st.markdown(
+        '<div class="suggestions-label">Descubrí El Salvador</div>',
+        unsafe_allow_html=True,
     )
-    st.markdown('<div class="suggestions-label">Empezá con una idea</div>', unsafe_allow_html=True)
+
+    destinations = [
+        {
+            "name": "El Tunco",
+            "icon": "🏖️",
+            "description": "Playa, surf y atardeceres frente al mar.",
+            "prompt": "Quiero conocer El Tunco",
+            "style": "tunco",
+            "image": "assets/destinos/Tunco.png",
+        },
+
+        {
+            "name": "Ruta de las Flores",
+            "icon": "🌺",
+            "description": "Pueblos coloridos, café y gastronomía.",
+            "prompt": "Planeame un viaje por la Ruta de las Flores",
+            "style": "flores",
+            "image": "assets/destinos/Ruta.png",
+
+        },
+
+                {
+            "name": "Cerro Verde",
+            "icon": "🌋",
+            "description": "Naturaleza, senderos y vistas volcánicas.",
+            "prompt": "¿Qué puedo hacer en Cerro Verde?",
+            "style": "cerro",
+            "image": "assets/destinos/Cerroverde.png",
+
+        },
+    ]
+
+    columns = st.columns(3, gap="medium")
+
+    for index, destination in enumerate(destinations):
+        with columns[index]:
+            st.image(
+    destination["image"],
+    use_container_width=True,
+)
+            st.markdown(
+                f"""
+                <div class="destination-card {destination['style']}">
+                    <div class="destination-icon">{destination['icon']}</div>
+                    <div class="destination-name">{destination['name']}</div>
+                    <div class="destination-description">
+                        {destination['description']}
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+            if st.button(
+                "Explorar destino ↗",
+                key=f"destination_{index}",
+                use_container_width=True,
+            ):
+                return destination["prompt"]
+
+    st.markdown(
+        '<div class="suggestions-label">¿Qué te gustaría planear?</div>',
+        unsafe_allow_html=True,
+    )
+
+    suggestions = [
+        "Recomendame lugares para visitar en El Salvador",
+        "Buscame hoteles para un viaje",
+        "¿Qué comidas típicas debería probar?",
+        "Planeame un viaje de fin de semana",
+    ]
+
     columns = st.columns(2, gap="small")
+
     for index, suggestion in enumerate(suggestions):
         with columns[index % 2]:
-            if st.button(suggestion, key=f"suggestion_{index}", use_container_width=True):
+            if st.button(
+                suggestion,
+                key=f"suggestion_{index}",
+                use_container_width=True,
+            ):
                 return suggestion
+
     return None
 
 

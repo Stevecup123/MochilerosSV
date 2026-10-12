@@ -9,21 +9,29 @@ def apply_visual_styles() -> None:
         """
         <style>
             :root {
-                --background: #202124;
-                --surface: #2a2c31;
-                --surface-secondary: #34363c;
-                --sidebar: #18191c;
-                --text-primary: #f3f4f6;
-                --text-secondary: #a4a8b0;
-                --primary: #35bcb8;
-                --primary-hover: #68d3ce;
-                --border: #40434a;
-                --hover: #292b30;
-                --user-message: #31343a;
-                --input: #292b30;
-                --shadow: rgba(0, 0, 0, .24);
-                --focus: rgba(53, 188, 184, .38);
-            }
+    --background: #f4f8f5;
+    --surface: #ffffff;
+    --surface-secondary: #e8f3eb;
+    --sidebar: #ffffff;
+    --text-primary: #20352b;
+    --text-secondary: #718078;
+    --primary: #16845b;
+    --primary-hover: #116b49;
+    --border: #dce8df;
+    --hover: #edf5ef;
+    --user-message: #e4f3e9;
+    --input: #ffffff;
+    --shadow: rgba(31, 67, 47, .12);
+    --focus: rgba(22, 132, 91, .25);
+}
+
+
+/* ===== Color exclusivo de la barra lateral ===== */
+section[data-testid="stSidebar"],
+section[data-testid="stSidebar"] > div:first-child {
+    background-color: #B8D8C0 !important;
+}
+
 
             .stApp {
                 background: var(--background);
@@ -389,19 +397,29 @@ def apply_visual_styles() -> None:
                 box-shadow: none;
             }
 
-            .st-key-composer_shell textarea {
-                background: transparent;
-                color: var(--text-primary);
-                font-size: 15px;
-                line-height: 1.45;
-                padding: 11px 2px 3px;
-                resize: none;
-            }
 
-            .st-key-composer_shell textarea::placeholder {
-                color: var(--text-secondary);
-                opacity: 1;
-            }
+
+/* ===== Color del texto del cuadro de escritura ===== */
+
+.st-key-composer_shell [data-testid="stTextArea"] textarea,
+.st-key-composer_shell div[data-baseweb="textarea"] textarea,
+.st-key-composer_shell textarea,
+.st-key-composer_shell input {
+    color: #111111 !important;
+    -webkit-text-fill-color: #111111 !important;
+    caret-color: #111111 !important;
+    background: #ffffff !important;
+    opacity: 1 !important;
+}
+
+.st-key-composer_shell textarea::placeholder,
+.st-key-composer_shell input::placeholder {
+    color: #707070 !important;
+    -webkit-text-fill-color: #707070 !important;
+    opacity: 1 !important;
+}
+
+
 
             .st-key-composer_shell .st-key-voice_composer_action button,
             .st-key-composer_shell .st-key-composer_send button {
@@ -483,6 +501,244 @@ def apply_visual_styles() -> None:
                 outline-offset: 2px;
             }
 
+            
+/* ===== Nueva apariencia turística ===== */
+
+.conversation-intro {
+    position: relative;
+    overflow: hidden;
+    margin: min(15vh, 120px) 0 22px;
+    padding: 42px 24px 38px;
+    border: 1px solid var(--border);
+    border-radius: 26px;
+    background:
+        radial-gradient(
+            ellipse at top right,
+            rgba(22, 132, 91, 0.13),
+            transparent 55%
+        ),
+        linear-gradient(135deg, #ffffff, #edf7ef);
+    box-shadow: 0 12px 35px rgba(31, 67, 47, 0.07);
+}
+
+.conversation-intro h1 {
+    color: #176b49;
+    font-size: clamp(34px, 5vw, 48px);
+    font-weight: 800;
+    letter-spacing: -0.045em;
+    margin-bottom: 18px;
+}
+
+.conversation-intro p {
+    color: var(--text-primary);
+    font-size: clamp(22px, 3vw, 29px);
+    font-weight: 700;
+    margin-bottom: 12px;
+}
+
+.conversation-intro span {
+    color: var(--text-secondary);
+    font-size: 15px;
+    line-height: 1.7;
+}
+
+.suggestions-label {
+    color: var(--text-primary);
+    font-size: 14px;
+    font-weight: 700;
+    margin: 24px auto 12px;
+    max-width: 620px;
+}
+
+.st-key-suggestion_0 button,
+.st-key-suggestion_1 button,
+.st-key-suggestion_2 button,
+.st-key-suggestion_3 button {
+    background: #ffffff;
+    border: 1px solid var(--border);
+    border-radius: 15px;
+    color: var(--text-primary);
+    font-size: 13px;
+    font-weight: 550;
+    line-height: 1.5;
+    min-height: 66px;
+    padding: 13px 15px;
+    text-align: left;
+    box-shadow: 0 3px 12px rgba(31, 67, 47, 0.04);
+    transition:
+        background 0.2s ease,
+        border-color 0.2s ease,
+        transform 0.2s ease,
+        box-shadow 0.2s ease;
+}
+
+.st-key-suggestion_0 button:hover,
+.st-key-suggestion_1 button:hover,
+.st-key-suggestion_2 button:hover,
+.st-key-suggestion_3 button:hover {
+    background: #edf7ef;
+    border-color: #16845b;
+    color: #116b49;
+    transform: translateY(-2px);
+    box-shadow: 0 7px 18px rgba(31, 67, 47, 0.09);
+}
+
+/* Mensajes más definidos */
+
+[data-testid="stChatMessage"]:has(.message-role-marker.assistant) {
+    background: #ffffff;
+    border: 1px solid var(--border);
+    border-radius: 5px 18px 18px 18px;
+    margin-right: auto;
+    padding: 14px 17px;
+    box-shadow: 0 3px 12px rgba(31, 67, 47, 0.04);
+}
+
+/* Barra superior */
+
+.chat-topbar {
+    padding-bottom: 16px;
+    margin-bottom: 18px;
+}
+
+.chat-topbar-title {
+    color: #176b49;
+    font-size: 17px;
+    font-weight: 750;
+}
+
+.chat-topbar-status {
+    color: #16845b;
+    font-weight: 600;
+}
+
+/* Cuadro para escribir */
+
+.st-key-composer_shell {
+    border-color: #d3e5d8;
+    box-shadow: 0 12px 32px rgba(31, 67, 47, 0.13);
+}
+
+.st-key-composer_shell:focus-within {
+    border-color: #16845b;
+    box-shadow: 0 0 0 3px rgba(22, 132, 91, 0.10);
+}
+
+/* Ajustes para celulares */
+
+@media (max-width: 640px) {
+    .conversation-intro {
+        margin-top: 10vh;
+        padding: 32px 18px;
+        border-radius: 21px;
+    }
+
+    .conversation-intro h1 {
+        font-size: 35px;
+    }
+
+    .conversation-intro p {
+        font-size: 23px;
+    }
+
+    .st-key-suggestion_0 button,
+    .st-key-suggestion_1 button,
+    .st-key-suggestion_2 button,
+    .st-key-suggestion_3 button {
+        min-height: 76px;
+        padding: 10px;
+        font-size: 12px;
+    }
+}
+
+
+/* ===== Tarjetas de destinos turísticos ===== */
+
+.destination-card {
+    box-sizing: border-box;
+    min-height: 190px;
+    padding: 18px 14px;
+    margin-bottom: 10px;
+    border: 1px solid rgba(22, 132, 91, 0.15);
+    border-radius: 18px;
+    background: linear-gradient(145deg, #ffffff, #edf7ef);
+    box-shadow: 0 5px 16px rgba(31, 67, 47, 0.06);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.destination-card.tunco {
+    background: linear-gradient(145deg, #ffffff, #e5f5f5);
+}
+
+.destination-card.cerro {
+    background: linear-gradient(145deg, #ffffff, #e8f3e9);
+}
+
+.destination-card.flores {
+    background: linear-gradient(145deg, #ffffff, #f8edf5);
+}
+
+.destination-icon {
+    font-size: 34px;
+    margin-bottom: 15px;
+}
+
+.destination-name {
+    color: #176b49;
+    font-size: 16px;
+    font-weight: 750;
+    line-height: 1.3;
+    margin-bottom: 9px;
+}
+
+.destination-description {
+    color: #65756b;
+    font-size: 12px;
+    line-height: 1.6;
+}
+
+.st-key-destination_0 button,
+.st-key-destination_1 button,
+.st-key-destination_2 button {
+    background: #ffffff;
+    color: #176b49;
+    border: 1px solid #cfe3d5;
+    border-radius: 11px;
+    font-size: 12px;
+    font-weight: 650;
+    min-height: 40px;
+}
+
+.st-key-destination_0 button:hover,
+.st-key-destination_1 button:hover,
+.st-key-destination_2 button:hover {
+    background: #e8f5ec;
+    border-color: #16845b;
+    color: #116b49;
+}
+
+@media (max-width: 640px) {
+    .destination-card {
+        min-height: 205px;
+        padding: 13px 10px;
+        border-radius: 14px;
+    }
+
+    .destination-icon {
+        font-size: 28px;
+        margin-bottom: 12px;
+    }
+
+    .destination-name {
+        font-size: 14px;
+    }
+
+    .destination-description {
+        font-size: 11px;
+    }
+}
+
+            
             @media (max-width: 640px) {
                 .block-container {
                     max-width: 100%;
@@ -545,7 +801,45 @@ def apply_visual_styles() -> None:
                     transition-duration: .01ms !important;
                 }
             }
+
+            /* ===== Fotografías de destinos ===== */
+
+div[data-testid="stImage"] img {
+    border-radius: 16px;
+    object-fit: cover;
+}
+
+.destination-card {
+    margin-top: 0;
+    border-radius: 0 0 16px 16px;
+}
+
+.destination-name {
+    font-size: 17px;
+}
+
+.destination-description {
+    font-size: 13px;
+    line-height: 1.65;
+}
+
+@media (max-width: 640px) {
+    div[data-testid="stImage"] img {
+        border-radius: 12px;
+    }
+
+    .destination-name {
+        font-size: 14px;
+    }
+
+    .destination-description {
+        font-size: 12px;
+    }
+}
+
         </style>
         """,
         unsafe_allow_html=True,
+   
     )
+
