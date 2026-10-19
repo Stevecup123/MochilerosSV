@@ -4,6 +4,7 @@ html, body { background: transparent; margin: 0; overflow: hidden; }
 
 .composer {
   align-items: end;
+  position: relative;
   display: flex;
   gap: 8px;
   min-height: 56px;
@@ -46,3 +47,32 @@ button:hover { background: #292b30; border-color: #40434a; color: #35bcb8; }
 
 button.send { background: #35bcb8; border-color: #35bcb8; color: #fff; }
 button.send:hover { background: #68d3ce; border-color: #68d3ce; color: #fff; }
+
+button.dictation {
+  border-color: #cfe3d5;
+  border-radius: 50%;
+  color: #176b49;
+}
+
+button.dictation:hover { background: #edf7ef; border-color: #16845b; color: #116b49; }
+button.dictation.recording { animation: dictation-pulse 1.1s ease-in-out infinite; background: #d95f5a; border-color: #d95f5a; color: #fff; }
+button.dictation.processing { background: #fff5dd; border-color: #d9a52c; color: #a76b00; cursor: wait; }
+button:disabled { cursor: not-allowed; opacity: .7; }
+
+.composer-status {
+  background: #176b49;
+  border-radius: 999px;
+  bottom: calc(100% + 7px);
+  color: #fff;
+  font: 600 12px/1.2 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  left: 12px;
+  padding: 7px 10px;
+  position: absolute;
+}
+
+.composer-status.error { background: #b54743; }
+.composer-status.ready { background: #176b49; }
+
+@keyframes dictation-pulse {
+  50% { box-shadow: 0 0 0 7px rgba(217, 95, 90, .17); }
+}

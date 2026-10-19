@@ -26,6 +26,7 @@ from state.voice import (
 )
 from state.travel import add_favorite, build_travel_context, find_requested_favorite, initialize_travel_state
 from ui.composer import render_composer
+from ui.loading import dismiss_loading_screen, render_loading_screen
 from ui.styles import apply_visual_styles
 
 
@@ -36,6 +37,10 @@ st.set_page_config(
     # Streamlit abre el sidebar en escritorio y lo convierte en menú en pantallas pequeñas.
     initial_sidebar_state="auto",
 )
+
+# Se crea antes de cualquier inicialización potencialmente lenta. El CSS de la
+# cubierta también la oculta por tiempo si la inicialización falla antes de retirarla.
+loading_screen = render_loading_screen()
 
 WELCOME_MESSAGE = {
     "role": "assistant",
@@ -113,21 +118,45 @@ def _sync_legacy_history() -> None:
     ]
 
 
+
 def persist_active_conversation() -> None:
-    """Actualiza una sola conversación activa, sin crear duplicados por mensaje."""
+    """Actualiza una conversación sin perder su título personalizado."""
     messages = st.session_state.messages
+
     if not _has_user_messages(messages):
         return
 
     active_id = st.session_state.active_conversation_id
+
     if active_id is None:
         active_id = uuid4().hex
         st.session_state.active_conversation_id = active_id
-    existing = next((item for item in st.session_state.conversations if item["id"] == active_id), None)
-    record = make_conversation(messages, active_id, existing["created_at"] if existing else None)
+
+    existing = next(
+        (
+            item
+            for item in st.session_state.conversations
+            if item["id"] == active_id
+        ),
+        None,
+    )
+
+    record = make_conversation(
+        messages,
+        active_id,
+        existing["created_at"] if existing else None,
+    )
+
+    # Conservar el nombre personalizado si la conversación ya existe.
+    if existing:
+        record["title"] = existing["title"]
+
     st.session_state.conversations = [
-        item for item in st.session_state.conversations if item["id"] != active_id
+        item
+        for item in st.session_state.conversations
+        if item["id"] != active_id
     ]
+
     st.session_state.conversations.insert(0, record)
     save_conversations(st.session_state.conversations)
     _set_requested_conversation_id(active_id)
@@ -145,40 +174,214 @@ def start_new_conversation() -> None:
     _sync_legacy_history()
 
 
+def rename_conversation(conversation_id: str, new_title: str) -> bool:
+    """Cambia el título de una conversación y guarda el historial."""
+    new_title = new_title.strip()
+
+    if not new_title:
+        return False
+
+    for conversation in st.session_state.conversations:
+        if conversation["id"] == conversation_id:
+            conversation["title"] = new_title[:80]
+            save_conversations(st.session_state.conversations)
+            _sync_legacy_history()
+            return True
+
+    return False
+
+
+def delete_conversation(conversation_id: str) -> None:
+    """Elimina una conversación del historial guardado."""
+    st.session_state.conversations = [
+        conversation
+        for conversation in st.session_state.conversations
+        if conversation["id"] != conversation_id
+    ]
+
+    save_conversations(st.session_state.conversations)
+
+    if st.session_state.active_conversation_id == conversation_id:
+        st.session_state.messages = [
+            {**WELCOME_MESSAGE, "message_id": uuid4().hex}
+        ]
+        st.session_state.active_conversation_id = uuid4().hex
+        st.session_state.composer_text = ""
+        st.session_state.selected_history_index = None
+        _set_requested_conversation_id(None)
+
+    st.session_state.rename_conversation_id = None
+    _sync_legacy_history()
+
 def render_sidebar() -> None:
-    """Presenta navegación mínima reutilizando el historial ya existente."""
+    """Presenta el historial y las opciones de cada conversación."""
     with st.sidebar:
+        st.session_state.setdefault("dark_mode", False)
         if not st.session_state.sidebar_open:
             return
 
         st.markdown(
-            """<div class="sidebar-header"><span>Mochileros SV</span></div>""",
+            '<div class="sidebar-header"><span>Mochileros SV</span></div>',
             unsafe_allow_html=True,
         )
+
+        
+        theme_label = (
+            "☀️  Cambiar a modo claro"
+            if st.session_state.dark_mode
+            else "🌙  Activar modo oscuro"
+        )
+
+        if st.button(
+            theme_label,
+            key="toggle_theme",
+            use_container_width=True,
+        ):
+            st.session_state.dark_mode = not st.session_state.dark_mode
+            st.rerun()
+
+
         if st.button("＋  Nuevo chat", key="new_conversation", use_container_width=True):
+            st.session_state.rename_conversation_id = None
             start_new_conversation()
             st.rerun()
 
         with st.container(key="sidebar_history"):
-            st.markdown('<p class="sidebar-label">Historial</p>', unsafe_allow_html=True)
+            st.markdown(
+                '<p class="sidebar-label">Historial</p>',
+                unsafe_allow_html=True,
+            )
+
             history = st.session_state.conversations
+            st.session_state.setdefault("rename_conversation_id", None)
+
             if history:
-                for index, conversation in enumerate(history):
-                    is_selected = st.session_state.active_conversation_id == conversation["id"]
-                    if st.button(
-                        conversation["title"],
-                        key=f"history_{index}",
-                        type="primary" if is_selected else "secondary",
-                        use_container_width=True,
-                    ):
-                        st.session_state.messages = _restore_messages(conversation["messages"])
-                        st.session_state.active_conversation_id = conversation["id"]
-                        st.session_state.selected_history_index = index
-                        _set_requested_conversation_id(conversation["id"])
-                        _sync_legacy_history()
-                        st.rerun()
+                for conversation in history:
+                    conversation_id = conversation["id"]
+                    is_selected = (
+                        st.session_state.active_conversation_id == conversation_id
+                    )
+
+                    title_column, menu_column = st.columns(
+                        [0.88, 0.12],
+                        gap="small",
+                        vertical_alignment="center",
+                    )
+
+                    with title_column:
+                        if st.button(
+                            conversation["title"],
+                            key=f"history_{conversation_id}",
+                            type="primary" if is_selected else "secondary",
+                            use_container_width=True,
+                            help=conversation["title"],
+
+                        ):
+                            st.session_state.messages = _restore_messages(
+                                conversation["messages"]
+                            )
+                            st.session_state.active_conversation_id = conversation_id
+                            st.session_state.selected_history_index = next(
+                                (
+                                    index
+                                    for index, item in enumerate(
+                                        st.session_state.conversations
+                                    )
+                                    if item["id"] == conversation_id
+                                ),
+                                None,
+                            )
+                            st.session_state.rename_conversation_id = None
+                            _set_requested_conversation_id(conversation_id)
+                            _sync_legacy_history()
+                            st.rerun()
+
+                    with menu_column:
+                        with st.popover(
+                            "⋯",
+                            help="Opciones del chat",
+                            use_container_width=True,
+                        ):
+                            if st.button(
+                                "✏️ Renombrar chat",
+                                key=f"rename_{conversation_id}",
+                                use_container_width=True,
+                            ):
+                                st.session_state.rename_conversation_id = conversation_id
+                                st.session_state[
+                                    f"rename_title_{conversation_id}"
+                                ] = conversation["title"]
+                                st.rerun()
+
+                            if st.button(
+                                "🗑️ Eliminar chat",
+                                key=f"delete_{conversation_id}",
+                                use_container_width=True,
+                            ):
+                                st.session_state.delete_confirmation_id = conversation_id
+                                st.rerun()
+
+                    if st.session_state.rename_conversation_id == conversation_id:
+                        new_title = st.text_input(
+                            "Nuevo nombre",
+                            key=f"rename_title_{conversation_id}",
+                            max_chars=80,
+                        )
+
+                        save_column, cancel_column = st.columns(2)
+
+                        with save_column:
+                            if st.button(
+                                "Guardar",
+                                key=f"save_rename_{conversation_id}",
+                                use_container_width=True,
+                            ):
+                                if rename_conversation(conversation_id, new_title):
+                                    st.session_state.rename_conversation_id = None
+                                    st.rerun()
+                                else:
+                                    st.warning("Escribí un nombre para el chat.")
+
+                        with cancel_column:
+                            if st.button(
+                                "Cancelar",
+                                key=f"cancel_rename_{conversation_id}",
+                                use_container_width=True,
+                            ):
+                                st.session_state.rename_conversation_id = None
+                                st.rerun()
+
+                    if st.session_state.get("delete_confirmation_id") == conversation_id:
+                        st.warning(
+                            f"¿Querés eliminar «{conversation['title']}»?"
+                        )
+
+                        confirm_column, cancel_column = st.columns(2)
+
+                        with confirm_column:
+                            if st.button(
+                                "Sí, eliminar",
+                                key=f"confirm_delete_{conversation_id}",
+                                use_container_width=True,
+                            ):
+                                delete_conversation(conversation_id)
+                                st.session_state.delete_confirmation_id = None
+                                st.rerun()
+
+                        with cancel_column:
+                            if st.button(
+                                "Cancelar",
+                                key=f"cancel_delete_{conversation_id}",
+                                use_container_width=True,
+                            ):
+                                st.session_state.delete_confirmation_id = None
+                                st.rerun()
+
             else:
-                st.markdown('<p class="sidebar-empty">No hay conversaciones todavía.</p>', unsafe_allow_html=True)
+                st.markdown(
+                    '<p class="sidebar-empty">No hay conversaciones todavía.</p>',
+                    unsafe_allow_html=True,
+                )
 
 def initialize_messages() -> None:
     """Prepara un borrador vacío para una sesión nueva."""
@@ -233,13 +436,18 @@ def initialize_conversation_storage() -> None:
 
 
 def render_message(message: dict[str, str]) -> None:
-    """Renderiza un mensaje del historial con el estilo de su rol."""
-    with st.chat_message(message["role"]):
+    """Muestra cada mensaje dentro de un bloque legible."""
+    role = message["role"]
+
+    with st.chat_message(role):
         st.markdown(
-            f'<span class="message-role-marker {message["role"]}"></span>',
+            f'<span class="message-role-marker {role}"></span>',
             unsafe_allow_html=True,
         )
-        st.markdown(message["content"])
+
+        with st.container(border=True):
+            st.markdown(message["content"])
+
 
 
 def render_conversation() -> None:
@@ -344,6 +552,7 @@ def render_suggestions() -> str | None:
     return None
 
 
+
 def respond_to_user(prompt: str) -> None:
     """Añade el mensaje y delega la respuesta al servicio conversacional."""
     prompt = prompt.strip()
@@ -351,41 +560,69 @@ def respond_to_user(prompt: str) -> None:
         return
 
     st.session_state.messages.append(
-        {"message_id": uuid4().hex, "role": "user", "content": prompt, "origin": "text"}
+        {
+            "message_id": uuid4().hex,
+            "role": "user",
+            "content": prompt,
+            "origin": "text",
+        }
     )
     render_message({"role": "user", "content": prompt})
 
     requested_favorite = find_requested_favorite(prompt)
+
     if requested_favorite:
         was_added = add_favorite(requested_favorite)
+
         response = (
             f"¡Listo! Guardé **{requested_favorite}** en tus favoritos de esta sesión. ♥"
-            if was_added else f"**{requested_favorite}** ya estaba en tus favoritos de esta sesión. ♥"
+            if was_added
+            else f"**{requested_favorite}** ya estaba en tus favoritos de esta sesión. ♥"
         )
+
         with st.chat_message("assistant"):
-            st.markdown('<span class="message-role-marker assistant"></span>', unsafe_allow_html=True)
-            st.markdown(response)
+            with st.container(border=True):
+                st.markdown(response)
+
         st.session_state.messages.append(
-            {"message_id": uuid4().hex, "role": "assistant", "content": response, "origin": "text"}
+            {
+                "message_id": uuid4().hex,
+                "role": "assistant",
+                "content": response,
+                "origin": "text",
+            }
         )
+
         persist_active_conversation()
         return
 
     with st.chat_message("assistant"):
-        st.markdown('<span class="message-role-marker assistant"></span>', unsafe_allow_html=True)
-        with st.spinner("Pensando en una buena recomendación..."):
-            try:
-                response = get_assistant_response(
-                    llm, st.session_state.messages, build_travel_context(st.session_state.messages)
-                )
-                st.markdown(response)
-            except Exception:
-                response = "Hubo un problema al procesar tu mensaje. Intentá nuevamente."
-                st.error(response)
+        with st.container(border=True):
+            with st.spinner("Pensando en una buena recomendación..."):
+                try:
+                    response = get_assistant_response(
+                        llm,
+                        st.session_state.messages,
+                        build_travel_context(st.session_state.messages),
+                    )
+                    st.markdown(response)
+
+                except Exception:
+                    response = (
+                        "Hubo un problema al procesar tu mensaje. "
+                        "Intentá nuevamente."
+                    )
+                    st.error(response)
 
     st.session_state.messages.append(
-        {"message_id": uuid4().hex, "role": "assistant", "content": response, "origin": "text"}
+        {
+            "message_id": uuid4().hex,
+            "role": "assistant",
+            "content": response,
+            "origin": "text",
+        }
     )
+
     persist_active_conversation()
 
 
@@ -404,11 +641,363 @@ initialize_conversation_storage()
 initialize_travel_state()
 initialize_voice_state()
 initialize_interface_state()
+dismiss_loading_screen(loading_screen)
+
+st.session_state.setdefault("dark_mode", False)
+apply_visual_styles()
+
+# Fondos turísticos: rotación en modo claro y fondo fijo en modo oscuro
+if st.session_state.dark_mode:
+    st.markdown(
+    f'<span class="sidebar-state sidebar-{"open" if st.session_state.sidebar_open else "closed"}" aria-hidden="true"></span>',
+    unsafe_allow_html=True,
+)
+else:
+    st.markdown(
+        """
+        <div class="scenic-background scenic-beach" aria-hidden="true"></div>
+        <div class="scenic-background scenic-forest" aria-hidden="true"></div>
+        <div class="scenic-background scenic-village" aria-hidden="true"></div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+# Fondos turísticos: rotación en modo claro y fondo fijo en modo oscuro
+if st.session_state.dark_mode:
+    st.markdown(
+        '<div class="scenic-background scenic-night" aria-hidden="true"></div>',
+        unsafe_allow_html=True,
+    )
+else:
+    st.markdown(
+        """
+        <div class="scenic-background scenic-beach" aria-hidden="true"></div>
+        <div class="scenic-background scenic-forest" aria-hidden="true"></div>
+        <div class="scenic-background scenic-village" aria-hidden="true"></div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+initialize_interface_state()
+dismiss_loading_screen(loading_screen)
+
+st.session_state.setdefault("dark_mode", False)
+
+apply_visual_styles()
+
+if st.session_state.dark_mode:
+    st.markdown(
+        """
+        <style>
+        
+        
+/* Igualar el color de las opciones del menú en modo oscuro */
+div[data-testid="stPopoverBody"] button,
+div[data-testid="stPopoverBody"] button *,
+div[data-baseweb="popover"] button,
+div[data-baseweb="popover"] button * {
+    color: #e5eee8 !important;
+    -webkit-text-fill-color: #e5eee8 !important;
+    opacity: 1 !important;
+}
+
+
+/* Botón de tema en modo oscuro */
+section[data-testid="stSidebar"] .st-key-toggle_theme button {
+    background: #285640 !important;
+    color: #ffffff !important;
+    border-color: #47775b !important;
+    font-weight: 800 !important;
+}
+
+section[data-testid="stSidebar"] .st-key-toggle_theme button:hover {
+    background: #356c4d !important;
+}
+
+/* Tres puntitos en modo oscuro */
+section[data-testid="stSidebar"] [data-testid="stPopover"] > button {
+    background: transparent !important;
+    color: #e5eee8 !important;
+    border-color: transparent !important;
+    box-shadow: none !important;
+    font-weight: 800 !important;
+}
+
+section[data-testid="stSidebar"] [data-testid="stPopover"] > button:hover {
+    background: #285640 !important;
+    color: #ffffff !important;
+    border-color: #47775b !important;
+}
+
+
+        /* ===== Modo oscuro: fondo principal ===== */
+        .stApp {
+            background: #10251d !important;
+            color: #e5eee8 !important;
+        }
+
+        [data-testid="stMain"] {
+            background: #10251d !important;
+        }
+
+        /* ===== Barra lateral verde bosque ===== */
+        section[data-testid="stSidebar"],
+        section[data-testid="stSidebar"] > div:first-child {
+            background: #173d2e !important;
+        }
+
+        section[data-testid="stSidebar"] .stButton button {
+            color: #e5eee8 !important;
+        }
+
+        section[data-testid="stSidebar"] .stButton button:hover {
+            background: #285640 !important;
+        }
+
+        section[data-testid="stSidebar"] .st-key-new_conversation button {
+            background: #214b37 !important;
+            border-color: #416b53 !important;
+        }
+
+        section[data-testid="stSidebar"] [class*="st-key-history_"] button[kind="primary"] {
+            background: #315c43 !important;
+            color: #ffffff !important;
+        }
+
+        .sidebar-header {
+            color: #e5eee8 !important;
+        }
+
+        .sidebar-label,
+        .sidebar-empty {
+            color: #c0d4c7 !important;
+        }
+
+        /* ===== Barra superior ===== */
+        .chat-topbar {
+            border-color: #315442 !important;
+        }
+
+        .chat-topbar-title,
+        .chat-topbar-status {
+            color: #8bd5aa !important;
+        }
+
+        .chat-topbar-context {
+            color: #b6c9bd !important;
+        }
+
+        /* ===== Tarjetas de conversación ===== */
+        [data-testid="stChatMessage"]:has(.message-role-marker.assistant) {
+            background: #19382b !important;
+            border-color: #315442 !important;
+            box-shadow: none !important;
+        }
+
+        [data-testid="stChatMessage"] [data-testid="stMarkdownContainer"],
+        [data-testid="stChatMessage"] p,
+        [data-testid="stChatMessage"] li {
+            color: #e5eee8 !important;
+        }
+
+        [data-testid="stChatMessage"]:has(.message-role-marker.user) {
+            background: #244a37 !important;
+            border-color: #39664d !important;
+        }
+
+        /* ===== Sugerencias ===== */
+        .st-key-suggestion_0 button,
+        .st-key-suggestion_1 button,
+        .st-key-suggestion_2 button,
+        .st-key-suggestion_3 button {
+            background: #19382b !important;
+            border-color: #315442 !important;
+            color: #e5eee8 !important;
+            box-shadow: none !important;
+        }
+
+        .st-key-suggestion_0 button:hover,
+        .st-key-suggestion_1 button:hover,
+        .st-key-suggestion_2 button:hover,
+        .st-key-suggestion_3 button:hover {
+            background: #285640 !important;
+            border-color: #6eb98b !important;
+            color: #ffffff !important;
+        }
+
+        .suggestions-label,
+        .travel-note {
+            color: #c0d4c7 !important;
+        }
+
+        /* ===== Tarjetas de destinos ===== */
+        .destination-card,
+        .destination-card.tunco,
+        .destination-card.cerro,
+        .destination-card.flores {
+            background: #19382b !important;
+            border-color: #315442 !important;
+            box-shadow: none !important;
+        }
+
+        .destination-name {
+            color: #8bd5aa !important;
+        }
+
+        .destination-description {
+            color: #d0dfd5 !important;
+        }
+
+        .st-key-destination_0 button,
+        .st-key-destination_1 button,
+        .st-key-destination_2 button {
+            background: #214b37 !important;
+            border-color: #416b53 !important;
+            color: #e5eee8 !important;
+        }
+
+        .st-key-destination_0 button:hover,
+        .st-key-destination_1 button:hover,
+        .st-key-destination_2 button:hover {
+            background: #315c43 !important;
+            color: #ffffff !important;
+        }
+
+        /* ===== Menús y formularios del historial ===== */
+        
+
+
+/* ===== Menú de los tres puntos: letras negras ===== */
+
+div[data-baseweb="popover"],
+div[data-baseweb="popover"] > div,
+div[data-testid="stPopoverBody"],
+div[data-testid="stPopoverBody"] > div {
+    background-color: #19382b !important;
+    color: #111111 !important;
+}
+
+/* Forzar letras negras en las opciones */
+div[data-baseweb="popover"] button,
+div[data-baseweb="popover"] button *,
+div[data-testid="stPopoverBody"] button,
+div[data-testid="stPopoverBody"] button *,
+div[role="dialog"] button,
+div[role="dialog"] button * {
+    color: #111111 !important;
+    -webkit-text-fill-color: #111111 !important;
+    opacity: 1 !important;
+    text-shadow: none !important;
+}
+
+/* Iconos visibles */
+div[data-baseweb="popover"] svg,
+div[data-testid="stPopoverBody"] svg,
+div[role="dialog"] svg {
+    color: #111111 !important;
+    fill: currentColor !important;
+    opacity: 1 !important;
+}
+
+/* Mantener las letras negras al pasar el cursor */
+div[data-baseweb="popover"] button:hover,
+div[data-testid="stPopoverBody"] button:hover,
+div[role="dialog"] button:hover {
+    background-color: #285640 !important;
+    color: #111111 !important;
+    -webkit-text-fill-color: #111111 !important;
+}
+
+/* Campo para renombrar con fondo blanco y texto negro */
+section[data-testid="stSidebar"] input {
+    background-color: #ffffff !important;
+    color: #111111 !important;
+    -webkit-text-fill-color: #111111 !important;
+}
+
+
+        section[data-testid="stSidebar"] input {
+            background: #ffffff !important;
+            color: #111111 !important;
+            -webkit-text-fill-color: #111111 !important;
+        }
+
+        /* ===== Presentación: conservar letras verdosas ===== */
+        .conversation-intro {
+            background:
+                radial-gradient(
+                    ellipse at top right,
+                    rgba(22, 132, 91, 0.13),
+                    transparent 55%
+                ),
+                linear-gradient(135deg, #ffffff, #edf7ef) !important;
+            border-color: #dce8df !important;
+        }
+
+        .conversation-intro h1 {
+            color: #176b49 !important;
+        }
+
+        .conversation-intro p {
+            color: #20352b !important;
+        }
+
+        .conversation-intro span {
+            color: #718078 !important;
+        }
+
+        /* ===== Botón para abrir la barra lateral ===== */
+        .st-key-open_sidebar button {
+            background: #19382b !important;
+            border-color: #315442 !important;
+            color: #e5eee8 !important;
+        }
+
+        /* ===== Cuadro de escritura: siempre blanco ===== */
+        .st-key-composer_shell {
+            background: #ffffff !important;
+            border-color: #315442 !important;
+        }
+
+        .st-key-composer_shell [data-testid="stTextArea"],
+        .st-key-composer_shell div[data-baseweb="textarea"],
+        .st-key-composer_shell textarea,
+        .st-key-composer_shell input {
+            background: #ffffff !important;
+            color: #111111 !important;
+            -webkit-text-fill-color: #111111 !important;
+            caret-color: #111111 !important;
+        }
+
+        .st-key-composer_shell textarea::placeholder,
+        .st-key-composer_shell input::placeholder {
+            color: #707070 !important;
+            -webkit-text-fill-color: #707070 !important;
+        }
+
+        .st-key-composer_shell .st-key-voice_composer_action button {
+            color: #426650 !important;
+        }
+
+        .st-key-composer_shell .st-key-composer_send button {
+            background: #16845b !important;
+            color: #ffffff !important;
+        }
+
+        /* ===== Avisos y cuadros de diálogo ===== */
+        [data-testid="stAlert"] {
+            color: #e5eee8 !important;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
 st.markdown(
     f'<span class="sidebar-state sidebar-{"open" if st.session_state.sidebar_open else "closed"}" aria-hidden="true"></span>',
     unsafe_allow_html=True,
 )
-apply_visual_styles()
 render_sidebar()
 render_top_bar()
 suggestion_prompt = None

@@ -14,7 +14,9 @@
         placeholder="Contame qué lugar de El Salvador querés descubrir..."
         rows="1"
       ></textarea>
-      <button id="action" type="button" aria-label="Hablar con Mochileros" title="Hablar con Mochileros">🎙️</button>
+      <div class="composer-status" id="dictation-status" aria-live="polite" hidden></div>
+      <button id="dictation" class="dictation" type="button" aria-label="Dictar mensaje" title="Dictar mensaje">🎤</button>
+      <button id="action" type="button" aria-label="Iniciar conversación por voz" title="Iniciar conversación por voz">◉</button>
     </div>
     <script src="app.js"></script>
   </body>

@@ -23,8 +23,36 @@ def apply_visual_styles() -> None:
     --input: #ffffff;
     --shadow: rgba(31, 67, 47, .12);
     --focus: rgba(22, 132, 91, .25);
+
 }
 
+/* ===== Títulos completos del historial ===== */
+section[data-testid="stSidebar"] div[data-testid="stButton"] button {
+    height: auto !important;
+    min-height: 42px;
+    white-space: normal !important;
+    overflow: visible !important;
+}
+
+section[data-testid="stSidebar"] div[data-testid="stButton"] button p {
+    white-space: normal !important;
+    overflow-wrap: anywhere !important;
+    word-break: normal !important;
+    text-overflow: clip !important;
+    line-height: 1.35 !important;
+    text-align: left !important;
+}
+
+/* ===== Ajuste del ancho de la barra lateral ===== */
+section[data-testid="stSidebar"] {
+    min-width: 300px !important;
+}
+
+/* ===== Títulos del historial más compactos ===== */
+section[data-testid="stSidebar"] div[data-testid="stButton"] button p {
+    font-size: 14px !important;
+    line-height: 1.25 !important;
+}
 
 /* ===== Color exclusivo de la barra lateral ===== */
 section[data-testid="stSidebar"],
@@ -396,6 +424,56 @@ section[data-testid="stSidebar"] > div:first-child {
             .st-key-composer_shell [data-testid="stTextArea"]:focus-within {
                 box-shadow: none;
             }
+
+
+/* Botón de modo oscuro/claro */
+section[data-testid="stSidebar"] .st-key-toggle_theme button {
+    font-weight: 800 !important;
+    font-size: 15px !important;
+    background: #16845b !important;
+    color: #ffffff !important;
+    border: 1px solid #126b49 !important;
+    border-radius: 10px !important;
+    transition: background 0.2s ease, transform 0.2s ease !important;
+}
+
+section[data-testid="stSidebar"] .st-key-toggle_theme button:hover {
+    background: #126b49 !important;
+    color: #ffffff !important;
+}
+
+
+/* Menú de opciones de cada conversación */
+
+/* Menú de tres puntos: integrado con el historial */
+section[data-testid="stSidebar"] [data-testid="stPopover"] {
+    display: flex !important;
+    align-items: center !important;
+}
+
+section[data-testid="stSidebar"] [data-testid="stPopover"] > button {
+    min-width: 28px !important;
+    width: 28px !important;
+    height: 32px !important;
+    min-height: 32px !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    background: transparent !important;
+    color: #285640 !important;
+    border: none !important;
+    border-radius: 50% !important;
+    box-shadow: none !important;
+    font-size: 20px !important;
+    font-weight: 800 !important;
+    line-height: 1 !important;
+}
+
+section[data-testid="stSidebar"] [data-testid="stPopover"] > button:hover {
+    background: rgba(40, 86, 64, 0.12) !important;
+    border: none !important;
+    box-shadow: none !important;
+}
+
 
 
 
@@ -835,6 +913,265 @@ div[data-testid="stImage"] img {
     .destination-description {
         font-size: 12px;
     }
+}
+
+/* ===== FONDOS TURÍSTICOS DE MOCHILEROS SV ===== */
+
+.scenic-background {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+    opacity: 0;
+    transition: opacity 3s ease-in-out;
+}
+
+/* Playa tropical */
+.scenic-beach {
+    background:
+        radial-gradient(circle at 82% 16%, #fff0a8 0 4%, transparent 4.5%),
+        radial-gradient(ellipse at 20% 62%, rgba(255,255,255,.75), transparent 20%),
+        linear-gradient(to bottom,
+            #9cdef3 0%, #d3f3f7 34%,
+            #43c9d2 35%, #087fa8 64%,
+            #f3d5a0 65%, #e7bf83 100%);
+}
+
+/* Bosque al atardecer */
+.scenic-forest {
+    background:
+        radial-gradient(circle at 75% 23%, #ffd18a 0 5%, transparent 5.5%),
+        linear-gradient(to bottom,
+            #f6c08c 0%, #e88c70 34%,
+            #82936a 35%, #456b4b 58%,
+            #2d5039 59%, #193629 100%);
+}
+
+/* Pueblo bajo las estrellas */
+.scenic-village {
+    background:
+        radial-gradient(circle at 12% 15%, #fff0a3 0 2px, transparent 3px),
+        radial-gradient(circle at 30% 23%, #fff0a3 0 2px, transparent 3px),
+        radial-gradient(circle at 55% 12%, #fff0a3 0 2px, transparent 3px),
+        radial-gradient(circle at 79% 20%, #fff0a3 0 2px, transparent 3px),
+        radial-gradient(circle at 90% 9%, #fff0a3 0 2px, transparent 3px),
+        linear-gradient(to bottom,
+            #292c63 0%, #4c4381 42%,
+            #79618c 65%, #59454e 66%, #332b32 100%);
+}
+
+/* Rotación automática: cada ambiente ocupa 2 minutos */
+@keyframes showBeach {
+    0%, 30% { opacity: 1; }
+    33.333%, 100% { opacity: 0; }
+}
+
+@keyframes showForest {
+    0%, 30% { opacity: 0; }
+    33.333%, 63.333% { opacity: 1; }
+    66.666%, 100% { opacity: 0; }
+}
+
+@keyframes showVillage {
+    0%, 63.333% { opacity: 0; }
+    66.666%, 96.666% { opacity: 1; }
+    100% { opacity: 0; }
+}
+
+.scenic-beach {
+    animation: showBeach 360s ease-in-out infinite;
+}
+
+.scenic-forest {
+    animation: showForest 360s ease-in-out infinite;
+}
+
+.scenic-village {
+    animation: showVillage 360s ease-in-out infinite;
+}
+
+
+/* ===== INTERFAZ LEGIBLE SOBRE LOS PAISAJES ===== */
+
+/* Mantener los fondos decorativos detrás del contenido */
+.scenic-background {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+}
+
+/* Barra superior legible en modo claro */
+.chat-topbar {
+    position: relative;
+    background: rgba(255, 255, 255, 0.93);
+    border-radius: 14px;
+    padding: 12px 14px 16px;
+}
+
+/* Etiquetas legibles sobre cualquier paisaje */
+.suggestions-label,
+.travel-note {
+    display: table;
+    background: rgba(255, 255, 255, 0.94);
+    color: #20352b;
+    border-radius: 8px;
+    padding: 7px 11px;
+}
+
+/* La barra de escritura conserva su posición fija */
+.st-key-composer_shell {
+    position: fixed !important;
+    z-index: 100 !important;
+    background: #ffffff !important;
+    border: 1px solid #cbd8ce !important;
+    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.18) !important;
+}
+
+.st-key-composer_shell textarea,
+.st-key-composer_shell input,
+.st-key-composer_shell [data-baseweb="textarea"] {
+    background: #ffffff !important;
+    color: #111111 !important;
+    -webkit-text-fill-color: #111111 !important;
+    caret-color: #111111 !important;
+}
+
+.st-key-composer_shell textarea::placeholder,
+.st-key-composer_shell input::placeholder {
+    color: #707070 !important;
+    -webkit-text-fill-color: #707070 !important;
+}
+
+/* Fondo nocturno fijo */
+.scenic-night {
+    opacity: 1 !important;
+    animation: none !important;
+    background:
+        radial-gradient(circle at 83% 14%, #dce8ff 0 1.5px, transparent 3px),
+        radial-gradient(circle at 17% 26%, #dce8ff 0 1.5px, transparent 3px),
+        radial-gradient(circle at 65% 38%, #dce8ff 0 1px, transparent 3px),
+        linear-gradient(145deg, #10251d 0%, #173d2e 55%, #0c1c16 100%);
+}
+
+/* Ajustes específicos del modo oscuro */
+body:has(.scenic-night) .chat-topbar {
+    background: rgba(25, 56, 43, 0.96) !important;
+}
+
+body:has(.scenic-night) .suggestions-label,
+body:has(.scenic-night) .travel-note {
+    background: rgba(25, 56, 43, 0.96) !important;
+    color: #e5eee8 !important;
+}
+
+
+}
+
+/* Consultas del usuario */
+[data-testid="stChatMessage"]:has(.message-role-marker.user) {
+    background: rgba(225, 243, 232, 0.97) !important;
+    border: 1px solid #c5dfce !important;
+    border-radius: 16px 16px 5px 16px !important;
+    padding: 12px 17px !important;
+    margin: 10px 0 16px auto !important;
+    box-shadow: 0 3px 10px rgba(25, 55, 35, 0.10) !important;
+}
+
+/* Texto dentro de los bloques */
+[data-testid="stChatMessage"]:has(.message-role-marker.assistant) p,
+[data-testid="stChatMessage"]:has(.message-role-marker.assistant) li,
+[data-testid="stChatMessage"]:has(.message-role-marker.assistant) span,
+[data-testid="stChatMessage"]:has(.message-role-marker.assistant) h1,
+[data-testid="stChatMessage"]:has(.message-role-marker.assistant) h2,
+[data-testid="stChatMessage"]:has(.message-role-marker.assistant) h3,
+[data-testid="stChatMessage"]:has(.message-role-marker.user) p,
+[data-testid="stChatMessage"]:has(.message-role-marker.user) li,
+[data-testid="stChatMessage"]:has(.message-role-marker.user) span {
+    color: #20352b !important;
+}
+
+/* Evitar que los bloques tapen los fondos decorativos */
+.scenic-background {
+    z-index: 0;
+    pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .scenic-background {
+        animation: none !important;
+        transition: none !important;
+    }
+}
+
+
+/* ===== MENSAJES CON FONDO SOLIDO ===== */
+
+/* Bloque del asistente: lado izquierdo */
+[data-testid="stChatMessage"]:has(.message-role-marker.assistant)
+[data-testid="stVerticalBlockBorderWrapper"] {
+    background-color: #ffffff !important;
+    background: #ffffff !important;
+    border: 1px solid #d5e3d9 !important;
+    border-radius: 14px !important;
+    opacity: 1 !important;
+}
+
+/* Bloque del usuario: lado derecho */
+[data-testid="stChatMessage"]:has(.message-role-marker.user) {
+    flex-direction: row-reverse !important;
+}
+
+[data-testid="stChatMessage"]:has(.message-role-marker.user)
+[data-testid="stVerticalBlockBorderWrapper"] {
+    background-color: #d9f3e4 !important;
+    background: #d9f3e4 !important;
+    border: 1px solid #9bcdb1 !important;
+    border-radius: 14px !important;
+    opacity: 1 !important;
+}
+
+/* Texto oscuro y legible en ambos bloques */
+[data-testid="stChatMessage"]:has(.message-role-marker.assistant)
+[data-testid="stVerticalBlockBorderWrapper"] p,
+[data-testid="stChatMessage"]:has(.message-role-marker.user)
+[data-testid="stVerticalBlockBorderWrapper"] p {
+    color: #17251c !important;
+}
+
+/* Evitar fondos transparentes en el contenido interior */
+[data-testid="stChatMessage"]:has(.message-role-marker.assistant)
+[data-testid="stVerticalBlockBorderWrapper"] > div,
+[data-testid="stChatMessage"]:has(.message-role-marker.user)
+[data-testid="stVerticalBlockBorderWrapper"] > div {
+    background-color: #ffffff !important;
+}
+
+[data-testid="stChatMessage"]:has(.message-role-marker.user)
+[data-testid="stVerticalBlockBorderWrapper"] > div {
+    background-color: #d9f3e4 !important;
+}
+
+
+/* Texto legible en las respuestas y consultas */
+.stApp [data-testid="stChatMessage"] p,
+.stApp [data-testid="stChatMessage"] li,
+.stApp [data-testid="stChatMessage"] h1,
+.stApp [data-testid="stChatMessage"] h2,
+.stApp [data-testid="stChatMessage"] h3 {
+    color: #20352b !important;
+}
+
+/* Consulta del usuario: verde claro */
+.stApp [data-testid="stChatMessage"]:has(.message-role-marker.user) {
+    background: #e4f3e9 !important;
+    border-color: #b9d8c3 !important;
+}
+
+/* Respuesta del chatbot: blanco */
+.stApp [data-testid="stChatMessage"]:has(.message-role-marker.assistant) {
+    background: #ffffff !important;
+    border-color: #cbded0 !important;
 }
 
         </style>

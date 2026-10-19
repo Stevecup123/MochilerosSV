@@ -22,7 +22,6 @@ REALTIME_VAD_CONFIG = {
     "interrupt_response": False,
 }
 
-
 def get_openai_api_key() -> str | None:
     """Obtiene la clave desde .env o, en despliegue, Streamlit Secrets."""
     load_dotenv()
